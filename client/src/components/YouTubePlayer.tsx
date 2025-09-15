@@ -28,12 +28,13 @@ export default function YouTubePlayer({ track, onNext, onPrevious, onFeedback }:
   const retryCountRef = useRef(0);
   const playerReadyRef = useRef(false);
   const connectionStateRef = useRef<'connecting' | 'connected' | 'failed' | 'disconnected'>('disconnected');
+  const shouldAutoplayRef = useRef(true); // Auto-start new tracks
   const maxRetries = 3;
 
   // Create audio-only YouTube URL
   const getAudioUrl = (videoId: string) => {
     const origin = encodeURIComponent(window.location.origin);
-    return `https://www.youtube.com/embed/${videoId}?autoplay=0&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3&playsinline=1&enablejsapi=1&origin=${origin}`;
+    return `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3&playsinline=1&enablejsapi=1&origin=${origin}`;
   };
 
   // Sync refs with state
@@ -139,6 +140,13 @@ export default function YouTubePlayer({ track, onNext, onPrevious, onFeedback }:
         if (iframeRef.current) {
           iframeRef.current.contentWindow?.postMessage(JSON.stringify({event:"command",func:"getDuration",args:[]}), 'https://www.youtube.com');
           iframeRef.current.contentWindow?.postMessage(JSON.stringify({event:"command",func:"setVolume",args:[volumeRef.current]}), 'https://www.youtube.com');
+          
+          // Explicit autoplay fallback for browser policy compliance
+          if (shouldAutoplayRef.current) {
+            setTimeout(() => {
+              iframeRef.current?.contentWindow?.postMessage(JSON.stringify({event:"command",func:"playVideo",args:[]}), 'https://www.youtube.com');
+            }, 500); // Small delay to ensure iframe is fully ready
+          }
         }
       } else if (data.event === 'onStateChange') {
         const state = data.info;
@@ -209,6 +217,7 @@ export default function YouTubePlayer({ track, onNext, onPrevious, onFeedback }:
     playerReadyRef.current = false;
     connectionStateRef.current = 'disconnected';
     retryCountRef.current = 0;
+    shouldAutoplayRef.current = true; // Enable autoplay for new track
     cleanup();
 
     // Start handshake after short delay to ensure iframe is loaded
