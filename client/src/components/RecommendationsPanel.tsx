@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Wand2 } from "lucide-react";
 import RecommendationFeed from "@/components/RecommendationFeed";
-import type { Recommendation } from "@/lib/types";
+import type { Recommendation, PlaylistItem } from "@/lib/types";
 
 interface RecommendationsPanelProps {
   sessionId: string;
@@ -21,6 +21,12 @@ export default function RecommendationsPanel({
     enabled: !!sessionId,
   }) as { data: Recommendation[] };
 
+  // Get playlist data to track liked recommendations
+  const { data: playlist = [] } = useQuery({
+    queryKey: ["/api/playlist", sessionId],
+    enabled: !!sessionId,
+  }) as { data: PlaylistItem[] };
+
   if (recommendations.length === 0) {
     return null;
   }
@@ -28,6 +34,7 @@ export default function RecommendationsPanel({
   return (
     <RecommendationFeed 
       recommendations={recommendations}
+      playlist={playlist}
       onPlay={onPlay}
       onFeedback={onFeedback}
     />

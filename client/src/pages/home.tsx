@@ -10,7 +10,7 @@ import VoidPlaylist from "@/components/VoidPlaylist";
 import SonicProfile from "@/components/SonicProfile";
 import SystemStatus from "@/components/SystemStatus";
 import { ErrorBoundary, PlayerErrorBoundary, DataErrorBoundary } from "@/components/ErrorBoundary";
-import type { Song, Recommendation, ProcessingStatus as ProcessingStatusType } from "@/lib/types";
+import type { Song, Recommendation, ProcessingStatus as ProcessingStatusType, PlaylistItem } from "@/lib/types";
 
 export default function Home() {
   const [sessionId, setSessionId] = useState<string>("");
@@ -59,6 +59,12 @@ export default function Home() {
     enabled: !!sessionId,
     refetchInterval: (q) => ((q.state.data as any)?.status === "processing" ? 2000 : false),
   }) as { data: ProcessingStatusType };
+
+  // Get playlist data for ECHO button persistence
+  const { data: playlist = [] } = useQuery({
+    queryKey: ["/api/playlist", sessionId],
+    enabled: !!sessionId,
+  }) as { data: PlaylistItem[] };
 
   // Invalidate sonic profile when processing completes
   useEffect(() => {
@@ -145,6 +151,7 @@ export default function Home() {
             <PlayerErrorBoundary key={currentTrack.id} onRetry={() => setCurrentTrack(null)}>
               <YouTubePlayer 
                 track={currentTrack}
+                playlist={playlist}
                 onNext={handleNextTrack}
                 onPrevious={handlePreviousTrack}
                 onFeedback={handleFeedback}

@@ -4,16 +4,19 @@ import { Slider } from "@/components/ui/slider";
 import WaveformVisualizer from "@/components/WaveformVisualizer";
 import { CanvasErrorBoundary } from "@/components/ErrorBoundary";
 import { Music, Play, Pause, SkipBack, SkipForward, VolumeX, Volume2, X, Heart, Loader2, WifiOff } from "lucide-react";
-import type { Recommendation } from "@/lib/types";
+import type { Recommendation, PlaylistItem } from "@/lib/types";
 
 interface YouTubePlayerProps {
   track: Recommendation;
+  playlist: PlaylistItem[];
   onNext: () => void;
   onPrevious?: () => void;
   onFeedback: (recommendationId: string, liked: boolean) => void;
 }
 
-export default function YouTubePlayer({ track, onNext, onPrevious, onFeedback }: YouTubePlayerProps) {
+export default function YouTubePlayer({ track, playlist, onNext, onPrevious, onFeedback }: YouTubePlayerProps) {
+  // Check if current track is liked (in playlist)
+  const isTrackLiked = playlist.some(item => item.recommendation.id === track.id);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -406,11 +409,15 @@ export default function YouTubePlayer({ track, onNext, onPrevious, onFeedback }:
           <Button
             data-testid={`button-like-track-${track.id}`}
             onClick={() => onFeedback(track.id, true)}
-            className="neon-border px-6 py-3 rounded-lg hover:bg-secondary hover:text-secondary-foreground transition-all duration-200 neon-glow font-semibold"
+            className={`neon-border px-6 py-3 rounded-lg transition-all duration-200 neon-glow font-semibold ${
+              isTrackLiked 
+                ? "bg-secondary text-secondary-foreground border-secondary shadow-[0_0_15px] shadow-secondary/50" 
+                : "hover:bg-secondary hover:text-secondary-foreground"
+            }`}
             size="default"
-            variant="outline"
+            variant={isTrackLiked ? "default" : "outline"}
           >
-            <Heart className="w-5 h-5 mr-2" />
+            <Heart className={`w-5 h-5 mr-2 ${isTrackLiked ? "fill-current" : ""}`} />
             ECHO
           </Button>
         </div>
