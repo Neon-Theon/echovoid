@@ -37,7 +37,7 @@ export default function VoidPlaylist({ sessionId, onPlay }: VoidPlaylistProps) {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold flex items-center">
           <List className="text-primary mr-2 w-5 h-5" />
-          VOID PLAYLIST
+          ECHO CHAMBER
         </h2>
         <div className="flex space-x-1">
           <Button
