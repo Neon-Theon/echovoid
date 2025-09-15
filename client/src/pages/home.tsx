@@ -18,13 +18,24 @@ export default function Home() {
   const [currentTrack, setCurrentTrack] = useState<Recommendation | null>(null);
   const queryClient = useQueryClient();
 
-  // Initialize session
+  // Initialize session with localStorage persistence
   useEffect(() => {
     const initSession = async () => {
       try {
+        // Check for existing session in localStorage
+        const existingSessionId = localStorage.getItem("echo-void-session-id");
+        if (existingSessionId) {
+          console.log("Reusing existing session:", existingSessionId);
+          setSessionId(existingSessionId);
+          return;
+        }
+
+        // Create new session if none exists
         const response = await apiRequest("POST", "/api/session");
         const session = await response.json();
         setSessionId(session.id);
+        localStorage.setItem("echo-void-session-id", session.id);
+        console.log("Created new session:", session.id);
       } catch (error) {
         console.error("Failed to create session:", error);
       }
@@ -48,8 +59,23 @@ export default function Home() {
       // Also invalidate sonic profile to refresh it after processing
       queryClient.invalidateQueries({ queryKey: ["/api/sonic-profile", sessionId] });
     },
-    onError: (error) => {
+    onError: async (error) => {
       console.error("Failed to process songs:", error);
+      console.error("Error details:", error.message, error.cause);
+      
+      // If session not found, create a new session and retry
+      if (error.message && error.message.includes("Session not found")) {
+        console.log("Session expired, creating new session...");
+        try {
+          const response = await apiRequest("POST", "/api/session");
+          const session = await response.json();
+          setSessionId(session.id);
+          localStorage.setItem("echo-void-session-id", session.id);
+          console.log("Created new session after expiry:", session.id);
+        } catch (sessionError) {
+          console.error("Failed to create new session:", sessionError);
+        }
+      }
     }
   });
 
@@ -152,6 +178,7 @@ export default function Home() {
               <YouTubePlayer 
                 track={currentTrack}
                 playlist={playlist}
+                sessionId={sessionId}
                 onNext={handleNextTrack}
                 onPrevious={handlePreviousTrack}
                 onFeedback={handleFeedback}

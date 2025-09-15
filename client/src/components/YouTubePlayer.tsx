@@ -1,22 +1,40 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import WaveformVisualizer from "@/components/WaveformVisualizer";
 import { CanvasErrorBoundary } from "@/components/ErrorBoundary";
 import { Music, Play, Pause, SkipBack, SkipForward, VolumeX, Volume2, X, Heart, Loader2, WifiOff } from "lucide-react";
-import type { Recommendation, PlaylistItem } from "@/lib/types";
+import BmpSyncButton from "@/components/BmpSyncButton";
+import type { Recommendation, PlaylistItem, SonicProfile } from "@/lib/types";
 
 interface YouTubePlayerProps {
   track: Recommendation;
   playlist: PlaylistItem[];
+  sessionId: string;
   onNext: () => void;
   onPrevious?: () => void;
   onFeedback: (recommendationId: string, liked: boolean) => void;
 }
 
-export default function YouTubePlayer({ track, playlist, onNext, onPrevious, onFeedback }: YouTubePlayerProps) {
+export default function YouTubePlayer({ track, playlist, sessionId, onNext, onPrevious, onFeedback }: YouTubePlayerProps) {
   // Check if current track is liked (in playlist)
   const isTrackLiked = playlist.some(item => item.recommendation.id === track.id);
+  
+  // Get sonic profile to extract BPM for beat synchronization
+  const { data: sonicProfile } = useQuery({
+    queryKey: ["/api/sonic-profile", sessionId],
+    enabled: !!sessionId,
+  }) as { data: SonicProfile };
+  
+  // Extract BPM value from tempo string (e.g., "120.5 BPM" → 120.5)
+  const getBpmFromTempo = (tempo: string): number => {
+    if (!tempo) return 120; // Default BPM if no data
+    const match = tempo.match(/(\d+\.?\d*)/);
+    return match ? parseFloat(match[1]) : 120;
+  };
+  
+  const currentBpm = sonicProfile?.tempo ? getBpmFromTempo(sonicProfile.tempo) : 120;
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -353,21 +371,23 @@ export default function YouTubePlayer({ track, playlist, onNext, onPrevious, onF
             </Button>
           )}
           
-          <Button
-            data-testid="button-toggle-playback"
-            onClick={togglePlayback}
-            disabled={!track.videoId || isLoading || !playerReady}
-            className="neon-border w-12 h-12 rounded-full hover:bg-primary hover:text-primary-foreground transition-all duration-200 neon-glow"
-            variant="outline"
-          >
-            {isLoading ? (
+          {isLoading ? (
+            <Button
+              data-testid="button-toggle-playback-loading"
+              disabled={true}
+              className="neon-border w-12 h-12 rounded-full opacity-50"
+              variant="outline"
+            >
               <Loader2 className="w-5 h-5 animate-spin" />
-            ) : isPlaying ? (
-              <Pause className="w-5 h-5" />
-            ) : (
-              <Play className="w-5 h-5" />
-            )}
-          </Button>
+            </Button>
+          ) : (
+            <BmpSyncButton
+              isPlaying={isPlaying}
+              bpm={currentBpm}
+              disabled={!track.videoId || !playerReady}
+              onToggle={togglePlayback}
+            />
+          )}
           
           <Button
             data-testid="button-next-track"

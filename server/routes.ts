@@ -42,25 +42,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Create song list
       const songList = await storage.createSongList(sessionId, songs);
+      console.log(`Created song list ${songList.id} for session ${sessionId} with ${songs.length} songs`);
 
-      // Start feature extraction in background
-      setImmediate(async () => {
-        try {
-          const { features, processedCount } = await musicBrainzService.extractFeaturesFromSongs(songs);
-          
-          if (features) {
-            await storage.updateSongListFeatures(songList.id, features);
-          }
-          
-          console.log(`Processed ${processedCount}/${songs.length} songs for session ${sessionId}`);
-        } catch (error) {
-          console.error("Error extracting features:", error);
+      // Extract features synchronously to ensure they're ready when status is polled
+      try {
+        const { features, processedCount } = await musicBrainzService.extractFeaturesFromSongs(songs);
+        
+        if (features) {
+          await storage.updateSongListFeatures(songList.id, features);
+          console.log(`Updated song list ${songList.id} with features for session ${sessionId}`);
         }
-      });
+        
+        console.log(`Processed ${processedCount}/${songs.length} songs for session ${sessionId}`);
+      } catch (error) {
+        console.error("Error extracting features:", error);
+      }
 
       res.json({ 
         songListId: songList.id,
-        message: "Processing started",
+        message: "Processing completed",
         totalSongs: songs.length
       });
     } catch (error) {
@@ -75,12 +75,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { sessionId } = req.params;
       
       const songLists = await storage.getSongListsBySession(sessionId);
+      console.log(`Processing status check for session ${sessionId}: found ${songLists.length} song lists`);
+      
       if (songLists.length === 0) {
         return res.json({ status: "no_processing" });
       }
 
       const latestSongList = songLists[songLists.length - 1];
       const hasFeatures = latestSongList.features !== null;
+      console.log(`Latest song list ${latestSongList.id} has features: ${hasFeatures}`);
       
       res.json({
         status: hasFeatures ? "completed" : "processing",
