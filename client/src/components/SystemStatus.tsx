@@ -1,11 +1,12 @@
 import { Server } from "lucide-react";
+import { memo } from "react";
 
 interface SystemStatusProps {
   sessionId: string;
   processedTracks: number;
 }
 
-export default function SystemStatus({ sessionId, processedTracks }: SystemStatusProps) {
+function SystemStatus({ sessionId, processedTracks }: SystemStatusProps) {
   // Simple status indicators - in a real app these could be dynamic
   const status = {
     geminiAI: 'ONLINE' as const,
@@ -45,3 +46,5 @@ export default function SystemStatus({ sessionId, processedTracks }: SystemStatu
     </section>
   );
 }
+
+export default memo(SystemStatus);

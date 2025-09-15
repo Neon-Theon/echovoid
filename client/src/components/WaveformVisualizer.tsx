@@ -1,10 +1,10 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, memo } from "react";
 
 interface WaveformVisualizerProps {
   isPlaying: boolean;
 }
 
-export default function WaveformVisualizer({ isPlaying }: WaveformVisualizerProps) {
+function WaveformVisualizer({ isPlaying }: WaveformVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
   const isPlayingRef = useRef(isPlaying);
@@ -201,3 +201,5 @@ export default function WaveformVisualizer({ isPlaying }: WaveformVisualizerProp
     </div>
   );
 }
+
+export default memo(WaveformVisualizer);

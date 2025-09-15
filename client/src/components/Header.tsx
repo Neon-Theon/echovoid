@@ -1,6 +1,7 @@
 import { Settings } from "lucide-react";
+import { memo } from "react";
 
-export default function Header() {
+function Header() {
   return (
     <header className="relative border-b border-border bg-background/90 backdrop-blur-sm">
       <div className="container mx-auto px-4 py-4">
@@ -22,3 +23,5 @@ export default function Header() {
     </header>
   );
 }
+
+export default memo(Header);

@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Wand2, Play, Heart, X } from "lucide-react";
+import { memo } from "react";
 import type { Recommendation } from "@/lib/types";
 
 interface RecommendationFeedProps {
@@ -8,7 +9,7 @@ interface RecommendationFeedProps {
   onFeedback: (recommendationId: string, liked: boolean) => void;
 }
 
-export default function RecommendationFeed({ 
+function RecommendationFeed({ 
   recommendations, 
   onPlay, 
   onFeedback 
@@ -72,3 +73,5 @@ export default function RecommendationFeed({
     </section>
   );
 }
+
+export default memo(RecommendationFeed);

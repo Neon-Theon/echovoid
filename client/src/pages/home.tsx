@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import Header from "@/components/Header";
@@ -45,6 +45,8 @@ export default function Home() {
     onSuccess: (data) => {
       setCurrentSongListId(data.songListId);
       queryClient.invalidateQueries({ queryKey: ["/api/processing-status", sessionId] });
+      // Also invalidate sonic profile to refresh it after processing
+      queryClient.invalidateQueries({ queryKey: ["/api/sonic-profile", sessionId] });
     },
     onError: (error) => {
       console.error("Failed to process songs:", error);
@@ -57,6 +59,13 @@ export default function Home() {
     enabled: !!sessionId,
     refetchInterval: (q) => ((q.state.data as any)?.status === "processing" ? 2000 : false),
   }) as { data: ProcessingStatusType };
+
+  // Invalidate sonic profile when processing completes
+  useEffect(() => {
+    if (processingStatus?.status === "completed" && sessionId) {
+      queryClient.invalidateQueries({ queryKey: ["/api/sonic-profile", sessionId] });
+    }
+  }, [processingStatus?.status, sessionId, queryClient]);
 
   // Generate recommendations mutation
   const recommendationsMutation = useMutation({
@@ -89,37 +98,37 @@ export default function Home() {
     }
   });
 
-  const handleSongSubmit = (songs: Song[]) => {
+  const handleSongSubmit = useCallback((songs: Song[]) => {
     if (!sessionId) {
       console.error("No session ID available!");
       return;
     }
     processMutation.mutate(songs);
-  };
+  }, [sessionId, processMutation]);
 
-  const handleGenerateRecommendations = () => {
+  const handleGenerateRecommendations = useCallback(() => {
     if (currentSongListId) {
       recommendationsMutation.mutate();
     }
-  };
+  }, [currentSongListId, recommendationsMutation]);
 
-  const handlePlayTrack = (recommendation: Recommendation) => {
+  const handlePlayTrack = useCallback((recommendation: Recommendation) => {
     setCurrentTrack(recommendation);
-  };
+  }, []);
 
-  const handlePreviousTrack = () => {
+  const handlePreviousTrack = useCallback(() => {
     // Previous track functionality is now handled by the RecommendationsPanel
     setCurrentTrack(null);
-  };
+  }, []);
 
-  const handleNextTrack = () => {
+  const handleNextTrack = useCallback(() => {
     // Next track functionality is now handled by the RecommendationsPanel  
     setCurrentTrack(null);
-  };
+  }, []);
 
-  const handleFeedback = (recommendationId: string, liked: boolean) => {
+  const handleFeedback = useCallback((recommendationId: string, liked: boolean) => {
     feedbackMutation.mutate({ recommendationId, liked });
-  };
+  }, [feedbackMutation]);
 
   const showProcessing = processingStatus?.status === "processing";
   const canGenerateRecommendations = processingStatus?.status === "completed" && currentSongListId;

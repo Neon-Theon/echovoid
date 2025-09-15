@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Terminal, Brain } from "lucide-react";
@@ -9,7 +9,7 @@ interface SongInputProps {
   isProcessing: boolean;
 }
 
-export default function SongInput({ onSubmit, isProcessing }: SongInputProps) {
+function SongInput({ onSubmit, isProcessing }: SongInputProps) {
   const [input, setInput] = useState("");
 
   const handleSubmit = () => {
@@ -79,3 +79,5 @@ export default function SongInput({ onSubmit, isProcessing }: SongInputProps) {
     </section>
   );
 }
+
+export default memo(SongInput);
