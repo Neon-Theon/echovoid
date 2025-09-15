@@ -1,3 +1,5 @@
+import { Settings } from "lucide-react";
+
 export default function Header() {
   return (
     <header className="relative border-b border-border bg-background/90 backdrop-blur-sm">
@@ -12,7 +14,7 @@ export default function Header() {
               <span className="text-accent">Neon Drift Mode</span>
             </div>
             <button className="neon-border px-3 py-1 text-xs hover:bg-primary hover:text-primary-foreground transition-all duration-200 neon-glow">
-              <i className="fas fa-cog mr-1"></i>CONFIG
+              <Settings className="w-3 h-3 mr-1" />CONFIG
             </button>
           </div>
         </div>

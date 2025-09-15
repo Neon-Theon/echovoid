@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import WaveformVisualizer from "@/components/WaveformVisualizer";
+import { Music, Play, Pause, SkipBack, SkipForward, VolumeX, Volume2, X, Heart, Loader2, WifiOff } from "lucide-react";
 import type { Recommendation } from "@/lib/types";
 
 interface YouTubePlayerProps {
@@ -213,7 +214,7 @@ export default function YouTubePlayer({ track, onNext, onPrevious, onFeedback }:
   return (
     <section className="neon-border rounded bg-card p-4">
       <h2 className="text-lg font-semibold mb-3 flex items-center">
-        <i className="fas fa-music text-primary mr-2"></i>
+        <Music className="text-primary mr-2 w-5 h-5" />
         NOW PLAYING
       </h2>
       
@@ -272,7 +273,7 @@ export default function YouTubePlayer({ track, onNext, onPrevious, onFeedback }:
               size="sm"
               variant="outline"
             >
-              <i className="fas fa-step-backward"></i>
+              <SkipBack className="w-4 h-4" />
             </Button>
           )}
           
@@ -284,9 +285,11 @@ export default function YouTubePlayer({ track, onNext, onPrevious, onFeedback }:
             variant="outline"
           >
             {isLoading ? (
-              <i className="fas fa-spinner fa-spin"></i>
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : isPlaying ? (
+              <Pause className="w-5 h-5" />
             ) : (
-              <i className={`fas fa-${isPlaying ? 'pause' : 'play'} text-lg`}></i>
+              <Play className="w-5 h-5" />
             )}
           </Button>
           
@@ -297,13 +300,13 @@ export default function YouTubePlayer({ track, onNext, onPrevious, onFeedback }:
             size="sm"
             variant="outline"
           >
-            <i className="fas fa-step-forward"></i>
+            <SkipForward className="w-4 h-4" />
           </Button>
         </div>
 
         {/* Volume Control */}
         <div className="flex items-center space-x-2">
-          <i className="fas fa-volume-down text-muted-foreground"></i>
+          <VolumeX className="text-muted-foreground w-4 h-4" />
           <Slider
             value={[volume]}
             onValueChange={handleVolumeChange}
@@ -311,30 +314,30 @@ export default function YouTubePlayer({ track, onNext, onPrevious, onFeedback }:
             step={1}
             className="flex-1"
           />
-          <i className="fas fa-volume-up text-muted-foreground"></i>
+          <Volume2 className="text-muted-foreground w-4 h-4" />
           <span className="text-xs text-muted-foreground w-8">{volume}%</span>
         </div>
 
         {/* Feedback Section */}
-        <div className="flex justify-center space-x-3 pt-2">
+        <div className="flex justify-center space-x-4 pt-2">
           <Button
             data-testid={`button-dislike-track-${track.id}`}
             onClick={() => onFeedback(track.id, false)}
-            className="neon-border px-4 py-2 rounded hover:bg-destructive hover:text-destructive-foreground transition-all duration-200 neon-glow"
-            size="sm"
+            className="neon-border px-6 py-3 rounded-lg hover:bg-destructive hover:text-destructive-foreground transition-all duration-200 neon-glow font-semibold"
+            size="default"
             variant="outline"
           >
-            <i className="fas fa-times mr-1"></i>
+            <X className="w-5 h-5 mr-2" />
             VOID
           </Button>
           <Button
             data-testid={`button-like-track-${track.id}`}
             onClick={() => onFeedback(track.id, true)}
-            className="neon-border px-4 py-2 rounded hover:bg-secondary hover:text-secondary-foreground transition-all duration-200 neon-glow"
-            size="sm"
+            className="neon-border px-6 py-3 rounded-lg hover:bg-secondary hover:text-secondary-foreground transition-all duration-200 neon-glow font-semibold"
+            size="default"
             variant="outline"
           >
-            <i className="fas fa-heart mr-1"></i>
+            <Heart className="w-5 h-5 mr-2" />
             ECHO
           </Button>
         </div>
@@ -343,7 +346,7 @@ export default function YouTubePlayer({ track, onNext, onPrevious, onFeedback }:
         {!track.videoId && (
           <div className="text-center p-3 bg-muted/20 rounded">
             <div className="text-sm text-muted-foreground">
-              <i className="fas fa-wifi-slash mr-1"></i>
+              <WifiOff className="w-4 h-4 mr-1 inline" />
               Audio stream unavailable
             </div>
           </div>

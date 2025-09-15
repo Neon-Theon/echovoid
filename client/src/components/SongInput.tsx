@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Terminal, Brain } from "lucide-react";
 import type { Song } from "@/lib/types";
 
 interface SongInputProps {
@@ -42,7 +43,7 @@ export default function SongInput({ onSubmit, isProcessing }: SongInputProps) {
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/5 to-transparent"></div>
       <div className="relative z-10">
         <h2 className="text-xl font-semibold mb-4 flex items-center">
-          <i className="fas fa-terminal text-primary mr-2"></i>
+          <Terminal className="text-primary mr-2 w-5 h-5" />
           SONIC ANALYSIS INPUT
           <span className="terminal-cursor ml-2"></span>
         </h2>
@@ -70,7 +71,7 @@ export default function SongInput({ onSubmit, isProcessing }: SongInputProps) {
             disabled={isProcessing || songCount === 0}
             className="w-full bg-primary text-primary-foreground py-3 rounded font-semibold hover:bg-primary/80 transition-all duration-200 neon-glow flex items-center justify-center"
           >
-            <i className="fas fa-brain mr-2"></i>
+            <Brain className="w-4 h-4 mr-2" />
             {isProcessing ? "INITIALIZING..." : "INITIATE SONIC ANALYSIS"}
           </Button>
         </div>

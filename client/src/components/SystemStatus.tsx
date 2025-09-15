@@ -1,3 +1,5 @@
+import { Server } from "lucide-react";
+
 interface SystemStatusProps {
   sessionId: string;
   processedTracks: number;
@@ -14,7 +16,7 @@ export default function SystemStatus({ sessionId, processedTracks }: SystemStatu
   return (
     <section className="neon-border rounded bg-card p-6">
       <h2 className="text-lg font-semibold mb-4 flex items-center">
-        <i className="fas fa-server text-secondary mr-2"></i>
+        <Server className="text-secondary mr-2 w-5 h-5" />
         SYSTEM STATUS
       </h2>
       <div className="space-y-3 text-sm font-mono">

@@ -1,4 +1,5 @@
 import { Progress } from "@/components/ui/progress";
+import { Settings } from "lucide-react";
 
 interface ProcessingStatusProps {
   current: number;
@@ -13,7 +14,7 @@ export default function ProcessingStatus({ current, total }: ProcessingStatusPro
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-accent/10 to-transparent animate-pulse"></div>
       <div className="relative z-10">
         <h3 className="text-lg font-semibold mb-4 flex items-center text-accent">
-          <i className="fas fa-cog fa-spin mr-2"></i>
+          <Settings className="w-5 h-5 mr-2 animate-spin" />
           NEURAL PATTERN EXTRACTION
         </h3>
         <div className="space-y-3">

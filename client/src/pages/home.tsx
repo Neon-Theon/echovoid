@@ -144,10 +144,20 @@ export default function Home() {
       <div className="container mx-auto px-4 py-6 grid lg:grid-cols-3 gap-6">
         {/* Main Content Area */}
         <div className="lg:col-span-2 space-y-6">
-          <SongInput 
-            onSubmit={handleSongSubmit}
-            isProcessing={processMutation.isPending}
-          />
+          {/* Music Player replaces SongInput when track is active */}
+          {currentTrack ? (
+            <YouTubePlayer 
+              track={currentTrack}
+              onNext={handleNextTrack}
+              onPrevious={handlePreviousTrack}
+              onFeedback={handleFeedback}
+            />
+          ) : (
+            <SongInput 
+              onSubmit={handleSongSubmit}
+              isProcessing={processMutation.isPending}
+            />
+          )}
 
           {showProcessing && (
             <ProcessingStatus 
@@ -178,15 +188,6 @@ export default function Home() {
             <RecommendationFeed 
               recommendations={recommendations}
               onPlay={handlePlayTrack}
-              onFeedback={handleFeedback}
-            />
-          )}
-
-          {currentTrack && (
-            <YouTubePlayer 
-              track={currentTrack}
-              onNext={handleNextTrack}
-              onPrevious={handlePreviousTrack}
               onFeedback={handleFeedback}
             />
           )}

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { List, Heart, Play } from "lucide-react";
 import type { Recommendation, PlaylistItem } from "@/lib/types";
 
 interface VoidPlaylistProps {
@@ -35,7 +36,7 @@ export default function VoidPlaylist({ sessionId, onPlay }: VoidPlaylistProps) {
     <section className="neon-border rounded bg-card p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold flex items-center">
-          <i className="fas fa-list text-primary mr-2"></i>
+          <List className="text-primary mr-2 w-5 h-5" />
           VOID PLAYLIST
         </h2>
         <div className="flex space-x-1">
@@ -63,7 +64,7 @@ export default function VoidPlaylist({ sessionId, onPlay }: VoidPlaylistProps) {
       <div className="space-y-2 max-h-64 overflow-y-auto">
         {playlist.length === 0 ? (
           <div className="text-center text-muted-foreground py-8">
-            <i className="fas fa-heart text-4xl mb-4 opacity-30"></i>
+            <Heart className="w-16 h-16 mb-4 opacity-30 mx-auto" />
             <div>No tracks in playlist yet</div>
             <div className="text-xs">Like tracks to add them here</div>
           </div>
@@ -84,7 +85,7 @@ export default function VoidPlaylist({ sessionId, onPlay }: VoidPlaylistProps) {
                 size="sm"
                 variant="ghost"
               >
-                <i className="fas fa-play text-xs"></i>
+                <Play className="w-3 h-3" />
               </Button>
             </div>
           ))
