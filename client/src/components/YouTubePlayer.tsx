@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import WaveformVisualizer from "@/components/WaveformVisualizer";
@@ -19,9 +19,15 @@ export default function YouTubePlayer({ track, onNext, onPrevious, onFeedback }:
   const [volume, setVolume] = useState(80);
   const [isLoading, setIsLoading] = useState(true);
   const [playerReady, setPlayerReady] = useState(false);
+  const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'failed' | 'disconnected'>('disconnected');
+  
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const handshakeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const retryCountRef = useRef(0);
+  const playerReadyRef = useRef(false);
+  const connectionStateRef = useRef<'connecting' | 'connected' | 'failed' | 'disconnected'>('disconnected');
+  const maxRetries = 3;
 
   // Create audio-only YouTube URL
   const getAudioUrl = (videoId: string) => {
@@ -29,7 +35,155 @@ export default function YouTubePlayer({ track, onNext, onPrevious, onFeedback }:
     return `https://www.youtube.com/embed/${videoId}?autoplay=0&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3&playsinline=1&enablejsapi=1&origin=${origin}`;
   };
 
-  // YouTube IFrame API message listener and state management
+  // Sync refs with state
+  useEffect(() => {
+    playerReadyRef.current = playerReady;
+  }, [playerReady]);
+
+  useEffect(() => {
+    connectionStateRef.current = connectionState;
+  }, [connectionState]);
+
+  // Progress tracking functions
+  const startProgressTracking = useCallback(() => {
+    if (progressIntervalRef.current) return;
+    
+    progressIntervalRef.current = setInterval(() => {
+      if (iframeRef.current && playerReadyRef.current) {
+        iframeRef.current.contentWindow?.postMessage(JSON.stringify({event:"command",func:"getCurrentTime",args:[]}), 'https://www.youtube.com');
+      }
+    }, 1000);
+  }, []);
+
+  const stopProgressTracking = useCallback(() => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+  }, []);
+
+  // Clean up all timers and intervals
+  const cleanup = useCallback(() => {
+    stopProgressTracking();
+    if (handshakeTimeoutRef.current) {
+      clearTimeout(handshakeTimeoutRef.current);
+      handshakeTimeoutRef.current = null;
+    }
+    retryCountRef.current = 0;
+  }, [stopProgressTracking]);
+
+  // Handshake logic with exponential backoff - stable function
+  const initiateHandshake = useCallback(() => {
+    if (!iframeRef.current || retryCountRef.current >= maxRetries) {
+      setConnectionState('failed');
+      setIsLoading(false);
+      return;
+    }
+
+    setConnectionState('connecting');
+    connectionStateRef.current = 'connecting';
+    
+    // First establish communication
+    iframeRef.current.contentWindow?.postMessage(JSON.stringify({event:"listening", id:"echo-void-player"}), 'https://www.youtube.com');
+    
+    // Register for essential events after small delay
+    setTimeout(() => {
+      if (iframeRef.current) {
+        iframeRef.current.contentWindow?.postMessage(JSON.stringify({event:"command",func:"addEventListener",args:["onReady"]}), 'https://www.youtube.com');
+        iframeRef.current.contentWindow?.postMessage(JSON.stringify({event:"command",func:"addEventListener",args:["onStateChange"]}), 'https://www.youtube.com');
+        iframeRef.current.contentWindow?.postMessage(JSON.stringify({event:"command",func:"addEventListener",args:["infoDelivery"]}), 'https://www.youtube.com');
+      }
+    }, 100);
+
+    // Set up timeout with exponential backoff
+    const timeoutDuration = Math.min(3000 * Math.pow(2, retryCountRef.current), 10000);
+    handshakeTimeoutRef.current = setTimeout(() => {
+      // Use refs to avoid stale state
+      if (!playerReadyRef.current && connectionStateRef.current !== 'connected') {
+        retryCountRef.current++;
+        if (retryCountRef.current < maxRetries) {
+          console.warn(`YouTube connection attempt ${retryCountRef.current}/${maxRetries} failed, retrying...`);
+          initiateHandshake();
+        } else {
+          console.error('YouTube connection failed after maximum retries');
+          setConnectionState('failed');
+          setIsLoading(false);
+        }
+      }
+    }, timeoutDuration);
+  }, [maxRetries]);
+
+  // Handle YouTube API messages - stable function
+  const handleMessage = useCallback((event: MessageEvent) => {
+    if (event.origin !== 'https://www.youtube.com') return;
+
+    try {
+      const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+      
+      if (data.event === 'onReady') {
+        setPlayerReady(true);
+        setConnectionState('connected');
+        setIsLoading(false);
+        playerReadyRef.current = true;
+        connectionStateRef.current = 'connected';
+        retryCountRef.current = 0;
+        
+        // Clear handshake timeout since we received onReady
+        if (handshakeTimeoutRef.current) {
+          clearTimeout(handshakeTimeoutRef.current);
+          handshakeTimeoutRef.current = null;
+        }
+        
+        // Get initial video info
+        if (iframeRef.current) {
+          iframeRef.current.contentWindow?.postMessage(JSON.stringify({event:"command",func:"getDuration",args:[]}), 'https://www.youtube.com');
+          iframeRef.current.contentWindow?.postMessage(JSON.stringify({event:"command",func:"setVolume",args:[volumeRef.current]}), 'https://www.youtube.com');
+        }
+      } else if (data.event === 'onStateChange') {
+        const state = data.info;
+        
+        // YouTube player states: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (cued)
+        if (state === 1) { // Playing
+          setIsPlaying(true);
+          startProgressTracking();
+        } else if (state === 2) { // Paused
+          setIsPlaying(false);
+          stopProgressTracking();
+        } else if (state === 0) { // Ended
+          setIsPlaying(false);
+          stopProgressTracking();
+          onNextRef.current(); // Auto-advance to next track
+        } else if (state === 3) { // Buffering
+          setIsLoading(true);
+        } else if (state === -1 || state === 5) { // Unstarted or Cued
+          setIsLoading(false);
+        }
+      } else if (data.event === 'infoDelivery' && data.info) {
+        if (data.info.duration !== undefined && data.info.duration !== null) {
+          setDuration(data.info.duration);
+        }
+        if (data.info.currentTime !== undefined && data.info.currentTime !== null) {
+          setCurrentTime(data.info.currentTime);
+        }
+      }
+    } catch (error) {
+      console.error('Error parsing YouTube API message:', error);
+    }
+  }, []); // Empty deps - use refs for mutable values
+
+  // Store current values in refs for use in handleMessage
+  const volumeRef = useRef(volume);
+  const onNextRef = useRef(onNext);
+  
+  useEffect(() => {
+    volumeRef.current = volume;
+  }, [volume]);
+  
+  useEffect(() => {
+    onNextRef.current = onNext;
+  }, [onNext]);
+
+  // Initialize YouTube player when track changes - ONLY depend on track.videoId
   useEffect(() => {
     if (!track.videoId) {
       setIsLoading(false);
@@ -37,14 +191,10 @@ export default function YouTubePlayer({ track, onNext, onPrevious, onFeedback }:
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(0);
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-        progressIntervalRef.current = null;
-      }
-      if (handshakeTimeoutRef.current) {
-        clearTimeout(handshakeTimeoutRef.current);
-        handshakeTimeoutRef.current = null;
-      }
+      setConnectionState('disconnected');
+      playerReadyRef.current = false;
+      connectionStateRef.current = 'disconnected';
+      cleanup();
       return;
     }
 
@@ -54,122 +204,30 @@ export default function YouTubePlayer({ track, onNext, onPrevious, onFeedback }:
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
+    setConnectionState('disconnected');
+    playerReadyRef.current = false;
+    connectionStateRef.current = 'disconnected';
+    retryCountRef.current = 0;
+    cleanup();
 
-    // Clear any existing handshake timeout
-    if (handshakeTimeoutRef.current) {
-      clearTimeout(handshakeTimeoutRef.current);
-      handshakeTimeoutRef.current = null;
-    }
-
-    const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== 'https://www.youtube.com') return;
-
-      try {
-        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-        
-        if (data.event === 'onReady') {
-          setPlayerReady(true);
-          setIsLoading(false);
-          // Clear handshake timeout since we received onReady
-          if (handshakeTimeoutRef.current) {
-            clearTimeout(handshakeTimeoutRef.current);
-            handshakeTimeoutRef.current = null;
-          }
-          // Get initial video info with correct array formatting
-          if (iframeRef.current) {
-            iframeRef.current.contentWindow?.postMessage(JSON.stringify({event:"command",func:"getDuration",args:[]}), 'https://www.youtube.com');
-            iframeRef.current.contentWindow?.postMessage(JSON.stringify({event:"command",func:"setVolume",args:[volume]}), 'https://www.youtube.com');
-          }
-        } else if (data.event === 'onStateChange') {
-          const state = data.info;
-          
-          // YouTube player states: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (cued)
-          if (state === 1) { // Playing
-            setIsPlaying(true);
-            startProgressTracking();
-          } else if (state === 2) { // Paused
-            setIsPlaying(false);
-            stopProgressTracking();
-          } else if (state === 0) { // Ended
-            setIsPlaying(false);
-            stopProgressTracking();
-            onNext(); // Auto-advance to next track
-          } else if (state === 3) { // Buffering
-            setIsLoading(true);
-          } else if (state === -1 || state === 5) { // Unstarted or Cued
-            setIsLoading(false);
-          }
-        } else if (data.event === 'infoDelivery' && data.info) {
-          if (data.info.duration !== undefined && data.info.duration !== null) {
-            setDuration(data.info.duration);
-          }
-          if (data.info.currentTime !== undefined && data.info.currentTime !== null) {
-            setCurrentTime(data.info.currentTime);
-          }
-        }
-      } catch (error) {
-        console.error('Error parsing YouTube API message:', error);
-      }
-    };
-
-    const startProgressTracking = () => {
-      if (progressIntervalRef.current) return;
-      
-      progressIntervalRef.current = setInterval(() => {
-        if (iframeRef.current && playerReady) {
-          iframeRef.current.contentWindow?.postMessage(JSON.stringify({event:"command",func:"getCurrentTime",args:[]}), 'https://www.youtube.com');
-        }
-      }, 1000);
-    };
-
-    const stopProgressTracking = () => {
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-        progressIntervalRef.current = null;
-      }
-    };
-
-    // Send initial handshake and register event listeners
-    const initiateHandshake = () => {
-      if (iframeRef.current) {
-        // First establish communication
-        iframeRef.current.contentWindow?.postMessage(JSON.stringify({event:"listening", id:"echo-void-player"}), 'https://www.youtube.com');
-        
-        // Register for essential events - critical for many environments
-        setTimeout(() => {
-          if (iframeRef.current) {
-            iframeRef.current.contentWindow?.postMessage(JSON.stringify({event:"command",func:"addEventListener",args:["onReady"]}), 'https://www.youtube.com');
-            iframeRef.current.contentWindow?.postMessage(JSON.stringify({event:"command",func:"addEventListener",args:["onStateChange"]}), 'https://www.youtube.com');
-            iframeRef.current.contentWindow?.postMessage(JSON.stringify({event:"command",func:"addEventListener",args:["infoDelivery"]}), 'https://www.youtube.com');
-          }
-        }, 100);
-      }
-    };
-
-    // Set up handshake with fallback timer
-    const handshakeTimer = setTimeout(() => {
+    // Start handshake after short delay to ensure iframe is loaded
+    const initTimer = setTimeout(() => {
       initiateHandshake();
-      // Set up fallback timer in case onReady never arrives
-      handshakeTimeoutRef.current = setTimeout(() => {
-        if (!playerReady) {
-          console.warn('YouTube IFrame API handshake timeout, retrying...');
-          initiateHandshake();
-        }
-      }, 3000);
-    }, 100); // Small delay to ensure iframe is loaded
-
-    window.addEventListener('message', handleMessage);
+    }, 200);
 
     return () => {
-      window.removeEventListener('message', handleMessage);
-      stopProgressTracking();
-      clearTimeout(handshakeTimer);
-      if (handshakeTimeoutRef.current) {
-        clearTimeout(handshakeTimeoutRef.current);
-        handshakeTimeoutRef.current = null;
-      }
+      clearTimeout(initTimer);
+      cleanup();
     };
-  }, [track.videoId, onNext]);
+  }, [track.videoId]); // ONLY track.videoId dependency
+
+  // Set up global message listener - stable
+  useEffect(() => {
+    window.addEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
+  }, []); // Empty deps - stable listener
 
   const togglePlayback = () => {
     if (iframeRef.current && track.videoId && playerReady && !isLoading) {
@@ -247,7 +305,10 @@ export default function YouTubePlayer({ track, onNext, onPrevious, onFeedback }:
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>{formatTime(currentTime)}</span>
             <span className="text-accent">
-              {!track.videoId ? "◯ OFFLINE" : playerReady ? (isPlaying ? "◉ PLAYING" : "◎ READY") : "◔ LOADING"}
+              {!track.videoId ? "◯ OFFLINE" : 
+               connectionState === 'failed' ? "◆ FAILED" :
+               connectionState === 'connecting' ? "◔ CONNECTING" :
+               playerReady ? (isPlaying ? "◉ PLAYING" : "◎ READY") : "◔ LOADING"}
             </span>
             <span>{duration ? formatTime(duration) : "--:--"}</span>
           </div>
