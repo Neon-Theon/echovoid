@@ -1,0 +1,77 @@
+Build a full-stack web application called "Echo Void" – a revolutionary AI-powered music discovery player. The app features a minimalistic retro-futuristic cyberpunk aesthetic: matte black backgrounds with subtle glowing neon edges in electric blue, magenta, and cyan; glitch distortions on interactive elements; monospaced fonts like 'Courier New' or 'Rajdhani' for a terminal vibe; a central animated waveform that subtly morphs based on playback (using CSS keyframes or Canvas for low-poly neon lines); and ultra-sparse UI – only a large textarea for pasting song lists, a loading spinner with progress bar for processing, a vertical feed of 5-10 recommendations (each as a card with artist/title preview, play button, and like/dislike icons), minimal play controls (play/pause, next/prev, volume slider), and a small "Void Playlist" sidebar toggle for liked songs. Ensure responsive design for desktop/mobile with fluid animations (e.g., neon glow pulses on hover, faint CRT scan lines via CSS background). Use Tailwind CSS for rapid styling and Framer Motion for smooth transitions. Prioritize performance: Lazy-load embeds, compress assets, and cap initial load under 2MB.
+
+**Extensive Implementation Plan (Follow this agentically and automate as much as possible using Google's ecosystem where feasible, ensuring zero end-user API key requirements – all keys/configs handled via Replit secrets/environment variables during deployment):**
+
+1. **Project Setup and Architecture (Agentic Step 1: Bootstrap in Plan Mode):**
+   - Use Next.js 14+ (React) for frontend/backend in one repo for simplicity and Replit compatibility. Structure: `/app` for pages (home with paste area), `/components` for UI (PasteInput, RecFeed, PlayerEmbed, FeedbackBtns, PlaylistView), `/lib` for utils (audioFeatureExtractor, geminiRecommender, ytSearcher), `/api` routes for backend endpoints (processList, getRecs, updateFeedback, getPlaylist).
+   - Backend: Node.js with Express-like API routes in Next.js. Use Replit Database (or SQLite via better-sqlite3) for persistent user data: Store hashed session IDs (no real users), song lists as JSON, aggregated features, liked playlist, feedback history.
+   - Environment: Set up `.env.local` with placeholders; instruct in README to add to Replit Secrets: `GOOGLE_API_KEY` for Gemini (free tier via Google AI Studio). No other keys needed. Automate key usage: In code, `const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');` – if missing, fallback to mock mode for testing (generate dummy recs).
+   - Agentic Automation: Build iteratively – first scaffold UI skeleton and test rendering; then add backend routes; use Replit's built-in testing (console logs, browser preview); finally, end-to-end tests with sample data. Ensure CORS, rate limiting (express-rate-limit for external APIs), and error boundaries (Next.js Error.js). Deploy to Replit for instant hosting with custom domain support.
+
+2. **Song List Import and Parsing (Agentic Step 2: Automate Feature Extraction Without User Input):**
+   - UI: Large, dark textarea with placeholder "Paste your song list (up to 5,000 lines, format: Artist - Song Title\nArtist2 - Song2\n...)". Button triggers `/api/process-list` POST with body {songs: string[]}.
+   - Backend Parsing: Split input by lines, use regex `/^(.+?)\s*[-–]\s*(.+?)$/i` to extract artist/title. Trim, normalize (lowercase for searches). Handle variations (e.g., "feat." ignored). If >500 songs, sample randomly 500 for efficiency (respect API limits); store full list, note "Sampled for analysis".
+   - Automated Feature Extraction (Purely Audible, No Metadata/Lyrics):
+     - No Spotify or paid APIs – use free, open MusicBrainz + AcousticBrainz chain for deep audio features.
+     - Step 2a: For each song (batched, async with Promise.allSettled for parallelism, but throttle to 1 req/sec for MusicBrainz):
+       - Query MusicBrainz API (free, no key, https://musicbrainz.org/ws/2/recording?query=artist:"{artist}"%20AND%20recording:"{title}"&fmt=json&limit=1): Get first matching recording's MBID (UUID). If no match, skip or fallback to Gemini prompt: "Estimate MBID or features for '{artist} - {title}' based on knowledge" (but prioritize API).
+       - Rate limit: Use a simple delay (1000ms between calls) or bottleneck library. Handle 429 errors with exponential backoff.
+     - Step 2b: For each valid MBID, fetch AcousticBrainz low-level features (free API, no key, https://acousticbrainz.org/api/v1/{mbid}/low-level): JSON with:
+       - Rhythm: tempo (BPM), beats (positions, confidence).
+       - Spectral: centroid (brightness), rolloff (high freq cutoff), flux (change rate), zero_crossing_rate (percussiveness).
+       - Timbre: mfcc (20-40 Mel-Frequency Cepstral Coefficients for texture/timbre), gfcc/hpcp for additional timbre.
+       - Tonal: chroma (12-bin pitch class profile for harmony/melody), key/scale (but use chroma vector only for patterns).
+       - Avoid high-level (moods/genres). If no data (AcousticBrainz covers ~7M tracks, stopped 2022), skip or approximate via Gemini: "Generate plausible low-level audio features JSON for '{artist} - {title}': {tempo: float, mfcc: array[13], chroma: array[12], spectral_centroid: float, etc.}" – limit fallbacks to <10% of list.
+     - Aggregation: Compute stats in code (use mathjs or lodash): {tempo: {mean, std, range}, mfcc: {mean_vector: [13 vals], variance_matrix}, chroma: {dominant_pitches: top 3, avg_profile: [12]}, spectral: {avg_centroid, flux_variance}, rhythm_complexity: beat_strength_mean}. Serialize as JSON. Store in DB per session. Show UI progress: "Processing {current}/{total} songs... Extracted features: tempo 120-140 BPM, warm MFCC clusters."
+     - Stability: Cache results in DB (TTL 24h), handle network errors (retry 3x), validate features (e.g., tempo 60-200 BPM). If <50% success, warn user "Limited data; recommendations may vary" and boost Gemini weighting.
+
+3. **Revolutionary Recommendation Engine (Agentic Step 3: Hyper-Personalized Sonic Matching via Gemini):**
+   - Core Philosophy: Ditch all traditional algos (no collaborative filtering, no metadata). Redefine discovery via supra-level audible pattern recognition: Aggregate features into a "sonic archetype" (e.g., "velvet harmonics with driving 128BPM pulses" from high MFCC mid-range + consistent chroma C-minor + moderate flux).
+   - Backend: On demand or post-processing, call `/api/get-recs` GET (uses session ID from cookies/localStorage).
+     - Use Google Gemini 1.5 Pro (via @google/generative-ai npm package, env key): Model excels at multimodal/creative reasoning for inventing matches beyond databases.
+     - Dynamic Prompt Engineering (Automate via template):
+       ```
+       You are a sonic pattern virtuoso. Analyze ONLY audible elements from this user's 500+ song aggregate features [insert full JSON: {tempo: {...}, mfcc: {...}, etc.}]. Ignore lyrics, genres, artists' histories – focus on waveforms, harmonics, timbre, rhythm.
+
+       Identify core patterns: e.g., MFCC clusters indicate vocal warmth or synth grit; chroma variance shows harmonic tension; spectral flux for build-ups; tempo/beat sync for groove.
+
+       Create a 'sonic signature' summary: 1-2 sentences describing the essence (e.g., "Mid-tempo waves with resonant low-end overtones and subtle percussive edges").
+
+       Recommend exactly 5-10 unheard songs (obscure/emerging, not mainstream hits; ensure not in user's list [insert sampled titles]) that match 95%+ sonically. Prioritize instant love: Maximize timbre harmony (MFCC cosine similarity >0.9), rhythmic lock (tempo ±10%, beat alignment), harmonic resonance (chroma overlap >80%).
+
+       Output strict JSON: [
+         {"artist": "str", "title": "str", "sonic_match": "Detailed reason: e.g., 'MFCC alignment on 2nd-5th coeffs for ethereal reverb tails; tempo 132 BPM syncs with user's avg 128; chroma peaks in A minor echo dominant profiles'", "search_term": "Artist Title official audio"}
+       ]
+       Be creative: Invent hybrid patterns leading to lifelong discoveries, like blending user's flux patterns with undiscovered micro-genres.
+       ```
+     - Call: `const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" }); const result = await model.generateContent(prompt);` Parse JSON from response.
+     - Feedback Loop (Real-Time Tweaking): On like/dislike (POST `/api/feedback`), store {song: {liked: bool, features: extracted if played}}. Adjust future prompts: e.g., if likes skew low flux, add "Prioritize low spectral flux (<0.5) as user favors smooth transitions"; dislikes boost avoidance (e.g., "Reduce high zero-crossing >0.1"). Re-aggregate every 5 feedbacks. Use session DB for persistence across visits.
+     - Fallbacks: If Gemini fails (key issue/rate limit, free tier ~15RPM), use local similarity: Pre-load a small open dataset (e.g., fetch GTZAN or sample from AcousticBrainz in code) and compute cosine similarity on vectors with simple JS math. But prioritize Gemini for creativity.
+     - Automation/Stability: Cache recs 1h, limit 10/session, validate outputs (ensure JSON parsable, no duplicates). Test with sample: Input Beatles list, expect 60s rock matches.
+
+4. **Playback and Integration (Agentic Step 4: Seamless YouTube Streaming, No Keys):**
+   - For each rec, use "search_term" from Gemini to auto-fetch YouTube video ID.
+     - Backend: Install `youtube-search-without-api-key` npm (scrapes, no key). Call: `search(query, {type: 'video', maxResults: 1})` -> get first {id, url}. If fail, retry with variations ("{artist} {title} lyrics" fallback to audio).
+     - Return to frontend: Recs as {artist, title, videoId, match_reason}.
+   - UI Player: Embed via YouTube IFrame API (no key for basic embed/controls).
+     - Load script: `<script src="https://www.youtube.com/iframe_api"></script>`.
+     - On play: `new YT.Player('player-div', {videoId, width: '100%', height: '200px', playerVars: {enablejsapi:1, modestbranding:1, rel:0, controls:1}, events: {onReady: onPlayerReady, onStateChange: onPlayerStateChange}})` for play/pause/next sync.
+     - Controls: Custom neon buttons overlay iframe (play/pause via player.playVideo()/pauseVideo(), next loads next rec). Volume via player.setVolume(). Note source: "Streaming via YouTube" badge.
+     - Visualizer: Use Web Audio API on iframe audio (if accessible) or mock with Canvas: Draw neon lines pulsing to estimated BPM (from features). If unavailable, CSS animation synced to play state.
+     - Like/Dislike: Post-play modal with thumbs up/down; on like, add to playlist (DB array of {artist,title,videoId}); dislike refines model.
+     - Stability: Handle no-video (skip, notify "Unavailable, next?"), mobile embed issues (use responsive iframe), ad skips (playerVars: no ads if possible). Test cross-browser (Chrome/Firefox/Safari).
+
+5. **Playlist and UX Polish (Agentic Step 5: Minimalism with Addictiveness):**
+   - Void Playlist: Toggle sidebar with liked songs list; click to play from there (reuse player). Export button: Download as TXT/JSON.
+   - Sessions: Use localStorage for temp state, cookies for session ID to DB.
+   - Creativity Boost: Evolve UI – on likes, shift neon colors (e.g., more blue for mellow tempos via CSS vars). Gemini can suggest "archetype name" for UI header (e.g., "Neon Drift Mode").
+   - Edge Cases: Empty list (prompt "Paste songs to begin"), huge lists (paginate processing, UI queue), offline (cache recs in localStorage).
+   - Security/Stability: Sanitize inputs (no SQL inj), HTTPS in Replit, no audio downloads (embed only, legal). Monitor API quotas: MusicBrainz ~86k/day safe, AcousticBrainz unlimited, Gemini free tier sufficient for prototype.
+
+6. **Testing and Deployment (Agentic Step 6: Ensure Production-Ready):**
+   - Unit Tests: Jest for parsers (test 100 sample songs), API mocks (nock for external).
+   - E2E: Playwright for flow: Paste list -> process -> rec -> play -> like -> playlist.
+   - README: "Deploy: Fork Replit, add GOOGLE_API_KEY to Secrets (get free from ai.google.dev). No end-user setup – paste and discover!" Include sample list for demo.
+   - Innovation: Agentically extend – if time, add waveform preview via Howler.js (but keep minimal). Goal: Stable, zero-config for users, game-changing discoveries via sonic depth.
+
+Start in Plan Mode: Outline files/DB schema, then code iteratively with tests. Use Google's Gemini for all AI (no alternatives). Build for reliability: Everything integrates seamlessly, no guesses – official docs for APIs, handle all failures. Make it the app that redefines music forever.
