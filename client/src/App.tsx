@@ -3,6 +3,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Home from "@/pages/home";
 import NotFound from "@/pages/not-found";
 
@@ -23,7 +24,12 @@ function App() {
           {/* Scanline Effect */}
           <div className="scanline"></div>
           <Toaster />
-          <Router />
+          <ErrorBoundary 
+            fallbackType="default"
+            onRetry={() => window.location.reload()}
+          >
+            <Router />
+          </ErrorBoundary>
         </div>
       </TooltipProvider>
     </QueryClientProvider>

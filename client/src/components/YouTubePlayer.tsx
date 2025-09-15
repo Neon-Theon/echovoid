@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import WaveformVisualizer from "@/components/WaveformVisualizer";
+import { CanvasErrorBoundary } from "@/components/ErrorBoundary";
 import { Music, Play, Pause, SkipBack, SkipForward, VolumeX, Volume2, X, Heart, Loader2, WifiOff } from "lucide-react";
 import type { Recommendation } from "@/lib/types";
 
@@ -297,7 +298,9 @@ export default function YouTubePlayer({ track, onNext, onPrevious, onFeedback }:
 
         {/* Waveform Visualizer */}
         <div className="h-16">
-          <WaveformVisualizer isPlaying={isPlaying} />
+          <CanvasErrorBoundary key={track.id}>
+            <WaveformVisualizer isPlaying={isPlaying} />
+          </CanvasErrorBoundary>
         </div>
 
         {/* Progress Bar */}

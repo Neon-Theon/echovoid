@@ -4,11 +4,12 @@ import { apiRequest } from "@/lib/queryClient";
 import Header from "@/components/Header";
 import SongInput from "@/components/SongInput";
 import ProcessingStatus from "@/components/ProcessingStatus";
-import RecommendationFeed from "@/components/RecommendationFeed";
+import RecommendationsPanel from "@/components/RecommendationsPanel";
 import YouTubePlayer from "@/components/YouTubePlayer";
 import VoidPlaylist from "@/components/VoidPlaylist";
 import SonicProfile from "@/components/SonicProfile";
 import SystemStatus from "@/components/SystemStatus";
+import { ErrorBoundary, PlayerErrorBoundary, DataErrorBoundary } from "@/components/ErrorBoundary";
 import type { Song, Recommendation, ProcessingStatus as ProcessingStatusType } from "@/lib/types";
 
 export default function Home() {
@@ -71,11 +72,7 @@ export default function Home() {
     }
   });
 
-  // Get recommendations
-  const { data: recommendations = [] } = useQuery({
-    queryKey: ["/api/recommendations", sessionId],
-    enabled: !!sessionId,
-  }) as { data: Recommendation[] };
+  // Recommendations are now handled by RecommendationsPanel component
 
   // Submit feedback mutation
   const feedbackMutation = useMutation({
@@ -111,23 +108,13 @@ export default function Home() {
   };
 
   const handlePreviousTrack = () => {
-    if (currentTrack && recommendations.length > 0) {
-      const currentIndex = recommendations.findIndex(r => r.id === currentTrack.id);
-      if (currentIndex > 0) {
-        const previousTrack = recommendations[currentIndex - 1];
-        setCurrentTrack(previousTrack);
-      }
-    }
+    // Previous track functionality is now handled by the RecommendationsPanel
+    setCurrentTrack(null);
   };
 
   const handleNextTrack = () => {
-    if (currentTrack && recommendations.length > 0) {
-      const currentIndex = recommendations.findIndex(r => r.id === currentTrack.id);
-      if (currentIndex < recommendations.length - 1) {
-        const nextTrack = recommendations[currentIndex + 1];
-        setCurrentTrack(nextTrack);
-      }
-    }
+    // Next track functionality is now handled by the RecommendationsPanel  
+    setCurrentTrack(null);
   };
 
   const handleFeedback = (recommendationId: string, liked: boolean) => {
@@ -146,12 +133,14 @@ export default function Home() {
         <div className="lg:col-span-2 space-y-6">
           {/* Music Player replaces SongInput when track is active */}
           {currentTrack ? (
-            <YouTubePlayer 
-              track={currentTrack}
-              onNext={handleNextTrack}
-              onPrevious={handlePreviousTrack}
-              onFeedback={handleFeedback}
-            />
+            <PlayerErrorBoundary key={currentTrack.id} onRetry={() => setCurrentTrack(null)}>
+              <YouTubePlayer 
+                track={currentTrack}
+                onNext={handleNextTrack}
+                onPrevious={handlePreviousTrack}
+                onFeedback={handleFeedback}
+              />
+            </PlayerErrorBoundary>
           ) : (
             <SongInput 
               onSubmit={handleSongSubmit}
@@ -166,7 +155,7 @@ export default function Home() {
             />
           )}
 
-          {canGenerateRecommendations && recommendations.length === 0 && (
+          {canGenerateRecommendations && (
             <div className="neon-border rounded bg-card p-6">
               <div className="text-center">
                 <h3 className="text-lg font-semibold mb-4 text-accent">
@@ -184,23 +173,29 @@ export default function Home() {
             </div>
           )}
 
-          {recommendations.length > 0 && (
-            <RecommendationFeed 
-              recommendations={recommendations}
+          <DataErrorBoundary key={`recs-${sessionId}`} onRetry={() => queryClient.invalidateQueries({ queryKey: ["/api/recommendations", sessionId] })}>
+            <RecommendationsPanel 
+              sessionId={sessionId}
               onPlay={handlePlayTrack}
               onFeedback={handleFeedback}
             />
-          )}
+          </DataErrorBoundary>
         </div>
 
         {/* Sidebar */}
         <div className="lg:col-span-1 space-y-6">
-          <SonicProfile sessionId={sessionId} />
-          <VoidPlaylist sessionId={sessionId} onPlay={handlePlayTrack} />
-          <SystemStatus 
-            sessionId={sessionId}
-            processedTracks={processingStatus?.totalSongs || 0}
-          />
+          <DataErrorBoundary key={`sonic-${sessionId}`} onRetry={() => queryClient.invalidateQueries({ queryKey: ["/api/sonic-profile", sessionId] })}>
+            <SonicProfile sessionId={sessionId} />
+          </DataErrorBoundary>
+          <DataErrorBoundary key={`playlist-${sessionId}`} onRetry={() => queryClient.invalidateQueries({ queryKey: ["/api/playlist", sessionId] })}>
+            <VoidPlaylist sessionId={sessionId} onPlay={handlePlayTrack} />
+          </DataErrorBoundary>
+          <ErrorBoundary>
+            <SystemStatus 
+              sessionId={sessionId}
+              processedTracks={processingStatus?.totalSongs || 0}
+            />
+          </ErrorBoundary>
         </div>
       </div>
 
