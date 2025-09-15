@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 
 interface WaveformVisualizerProps {
   isPlaying: boolean;
@@ -10,13 +10,43 @@ export default function WaveformVisualizer({ isPlaying }: WaveformVisualizerProp
   const isPlayingRef = useRef(isPlaying);
   const animationTimeRef = useRef(0);
   const lastFrameTimeRef = useRef(0);
+  const resizeObserverRef = useRef<ResizeObserver>();
 
   // Update playing state ref without restarting animation
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
 
-  // Initialize canvas and start persistent animation loop
+  // Setup canvas with proper error handling
+  const setupCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return false;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return false;
+
+    try {
+      // Get actual display dimensions
+      const rect = canvas.getBoundingClientRect();
+      const displayWidth = rect.width;
+      const displayHeight = rect.height;
+      
+      // Set canvas size to match display size
+      canvas.width = displayWidth;
+      canvas.height = displayHeight;
+      
+      // Set display size explicitly
+      canvas.style.width = `${displayWidth}px`;
+      canvas.style.height = `${displayHeight}px`;
+      
+      return true;
+    } catch (error) {
+      console.warn('Canvas setup failed:', error);
+      return false;
+    }
+  }, []);
+
+  // Initialize canvas and start animation loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -24,23 +54,10 @@ export default function WaveformVisualizer({ isPlaying }: WaveformVisualizerProp
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set up canvas dimensions
-    const setupCanvas = () => {
-      const width = canvas.width = canvas.offsetWidth * devicePixelRatio;
-      const height = canvas.height = canvas.offsetHeight * devicePixelRatio;
-      ctx.scale(devicePixelRatio, devicePixelRatio);
-    };
-    
-    setupCanvas();
+    if (!setupCanvas()) return;
 
-    const bars = 40;
+    const points = 100; // Number of points in the wave line
     
-    // Seeded pseudo-random number generator for consistent patterns
-    const seededRandom = (seed: number) => {
-      const x = Math.sin(seed) * 10000;
-      return x - Math.floor(x);
-    };
-
     const animate = (currentTime: number) => {
       if (!canvas || !ctx) return;
       
@@ -49,77 +66,127 @@ export default function WaveformVisualizer({ isPlaying }: WaveformVisualizerProp
       
       // Only advance animation time when playing
       if (isPlayingRef.current) {
-        animationTimeRef.current += deltaTime * 0.003; // Smooth animation speed
+        animationTimeRef.current += deltaTime * 0.002; // Smooth animation speed
       }
 
-      const barWidth = canvas.offsetWidth / bars;
+      const width = canvas.width;
+      const height = canvas.height;
+      const centerY = height / 2;
       
-      // Clear canvas
+      // Clear canvas with black background
       ctx.fillStyle = '#0a0a0a';
-      ctx.fillRect(0, 0, canvas.offsetWidth, canvas.offsetHeight);
+      ctx.fillRect(0, 0, width, height);
 
-      for (let i = 0; i < bars; i++) {
-        // Calculate dynamic bar height with smooth easing
-        const baseHeight = 0.3; // Minimum height when not playing
-        const playingIntensity = isPlayingRef.current ? 1.0 : 0.1;
+      // Calculate amplitude based on playing state
+      const baseAmplitude = height * 0.1; // Minimum wave height
+      const maxAmplitude = height * 0.35; // Maximum wave height when playing
+      const playingIntensity = isPlayingRef.current ? 1.0 : 0.2;
+      const amplitude = baseAmplitude + (maxAmplitude - baseAmplitude) * playingIntensity;
+
+      // Create wave path
+      ctx.beginPath();
+      ctx.strokeStyle = 'transparent'; // We'll fill instead of stroke
+      
+      // Generate wave points
+      const wavePoints: Array<[number, number]> = [];
+      
+      for (let i = 0; i <= points; i++) {
+        const x = (i / points) * width;
+        const progress = i / points;
         
         // Multiple sine waves for complex patterns
-        const wave1 = Math.sin(animationTimeRef.current + i * 0.3) * 0.3;
-        const wave2 = Math.sin(animationTimeRef.current * 1.7 + i * 0.15) * 0.2;
-        const wave3 = seededRandom(animationTimeRef.current * 0.5 + i) * 0.1;
+        const wave1 = Math.sin(animationTimeRef.current + progress * Math.PI * 4) * 0.4;
+        const wave2 = Math.sin(animationTimeRef.current * 1.5 + progress * Math.PI * 6) * 0.3;
+        const wave3 = Math.sin(animationTimeRef.current * 2.2 + progress * Math.PI * 8) * 0.2;
         
-        const intensity = (wave1 + wave2 + wave3 + 0.6) * playingIntensity;
-        const barHeight = (baseHeight + intensity * 0.5) * canvas.offsetHeight;
+        const waveValue = (wave1 + wave2 + wave3) * amplitude;
+        const y = centerY + waveValue;
+        
+        wavePoints.push([x, y]);
+      }
 
-        const x = i * barWidth;
-        const y = canvas.offsetHeight - barHeight;
+      // Draw gradient-filled wave
+      const gradient = ctx.createLinearGradient(0, 0, width, 0);
+      const alpha = isPlayingRef.current ? 0.8 : 0.4;
+      
+      gradient.addColorStop(0, `rgba(0, 255, 255, ${alpha})`); // Cyan
+      gradient.addColorStop(0.3, `rgba(255, 0, 255, ${alpha})`); // Magenta  
+      gradient.addColorStop(0.6, `rgba(0, 255, 128, ${alpha})`); // Green-cyan
+      gradient.addColorStop(1, `rgba(0, 128, 255, ${alpha})`); // Blue
 
-        // Create gradient based on intensity
-        const gradient = ctx.createLinearGradient(0, y, 0, canvas.offsetHeight);
-        
-        const alpha = isPlayingRef.current ? 1.0 : 0.4;
-        
-        if (i % 3 === 0) {
-          gradient.addColorStop(0, `rgba(0, 255, 255, ${alpha})`); // Primary cyan
-          gradient.addColorStop(1, `rgba(0, 128, 255, ${alpha})`); // Accent blue
-        } else if (i % 3 === 1) {
-          gradient.addColorStop(0, `rgba(255, 0, 255, ${alpha})`); // Secondary magenta
-          gradient.addColorStop(1, `rgba(128, 0, 255, ${alpha})`); // Purple
+      // Create filled wave shape
+      ctx.beginPath();
+      ctx.moveTo(0, height); // Start from bottom left
+      
+      // Draw wave line
+      for (let i = 0; i < wavePoints.length; i++) {
+        const [x, y] = wavePoints[i];
+        if (i === 0) {
+          ctx.lineTo(x, y);
         } else {
-          gradient.addColorStop(0, `rgba(0, 255, 128, ${alpha})`); // Accent cyan-green
-          gradient.addColorStop(1, `rgba(0, 64, 255, ${alpha})`); // Blue
+          // Use quadratic curves for smoother lines
+          const prevPoint = wavePoints[i - 1];
+          const controlX = (prevPoint[0] + x) / 2;
+          const controlY = (prevPoint[1] + y) / 2;
+          ctx.quadraticCurveTo(prevPoint[0], prevPoint[1], controlX, controlY);
         }
+      }
+      
+      // Complete the fill shape
+      ctx.lineTo(width, height); // Bottom right
+      ctx.lineTo(0, height); // Bottom left
+      ctx.closePath();
+      
+      // Fill the wave
+      ctx.fillStyle = gradient;
+      ctx.fill();
 
-        ctx.fillStyle = gradient;
-        ctx.fillRect(x, y, barWidth - 2, barHeight);
-
-        // Add glow effect when playing
-        if (isPlayingRef.current) {
-          ctx.shadowColor = i % 3 === 0 ? '#00ffff' : i % 3 === 1 ? '#ff00ff' : '#00ff80';
-          ctx.shadowBlur = 8;
-          ctx.fillRect(x, y, barWidth - 2, barHeight);
-          ctx.shadowBlur = 0;
+      // Add glow effect when playing
+      if (isPlayingRef.current) {
+        ctx.save();
+        ctx.shadowColor = '#00ffff';
+        ctx.shadowBlur = 15;
+        ctx.globalCompositeOperation = 'screen';
+        
+        // Draw thinner glowing line on top
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.6)';
+        ctx.lineWidth = 2;
+        
+        for (let i = 0; i < wavePoints.length; i++) {
+          const [x, y] = wavePoints[i];
+          if (i === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
         }
+        ctx.stroke();
+        ctx.restore();
       }
 
       // Continue animation loop
       animationRef.current = requestAnimationFrame(animate);
     };
 
-    // Start the persistent animation loop
+    // Start the animation loop
     animationRef.current = requestAnimationFrame(animate);
 
-    // Handle window resize
-    const handleResize = () => {
-      setupCanvas();
-    };
-    window.addEventListener('resize', handleResize);
+    // Set up ResizeObserver for better resize handling
+    if (window.ResizeObserver) {
+      resizeObserverRef.current = new ResizeObserver(() => {
+        setupCanvas();
+      });
+      resizeObserverRef.current.observe(canvas);
+    }
 
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
-      window.removeEventListener('resize', handleResize);
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+      }
     };
   }, []); // Empty dependency array - only run once
 
@@ -128,7 +195,7 @@ export default function WaveformVisualizer({ isPlaying }: WaveformVisualizerProp
       <canvas
         ref={canvasRef}
         className="w-full h-16 rounded"
-        style={{ maxWidth: '100%' }}
+        style={{ maxWidth: '100%', display: 'block' }}
         aria-hidden="true"
       />
     </div>
