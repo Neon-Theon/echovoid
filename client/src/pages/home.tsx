@@ -44,6 +44,9 @@ export default function Home() {
     onSuccess: (data) => {
       setCurrentSongListId(data.songListId);
       queryClient.invalidateQueries({ queryKey: ["/api/processing-status", sessionId] });
+    },
+    onError: (error) => {
+      console.error("Failed to process songs:", error);
     }
   });
 
@@ -90,6 +93,10 @@ export default function Home() {
   });
 
   const handleSongSubmit = (songs: Song[]) => {
+    if (!sessionId) {
+      console.error("No session ID available!");
+      return;
+    }
     processMutation.mutate(songs);
   };
 
@@ -101,6 +108,26 @@ export default function Home() {
 
   const handlePlayTrack = (recommendation: Recommendation) => {
     setCurrentTrack(recommendation);
+  };
+
+  const handlePreviousTrack = () => {
+    if (currentTrack && recommendations.length > 0) {
+      const currentIndex = recommendations.findIndex(r => r.id === currentTrack.id);
+      if (currentIndex > 0) {
+        const previousTrack = recommendations[currentIndex - 1];
+        setCurrentTrack(previousTrack);
+      }
+    }
+  };
+
+  const handleNextTrack = () => {
+    if (currentTrack && recommendations.length > 0) {
+      const currentIndex = recommendations.findIndex(r => r.id === currentTrack.id);
+      if (currentIndex < recommendations.length - 1) {
+        const nextTrack = recommendations[currentIndex + 1];
+        setCurrentTrack(nextTrack);
+      }
+    }
   };
 
   const handleFeedback = (recommendationId: string, liked: boolean) => {
@@ -158,13 +185,8 @@ export default function Home() {
           {currentTrack && (
             <YouTubePlayer 
               track={currentTrack}
-              onNext={() => {
-                const currentIndex = recommendations.findIndex(r => r.id === currentTrack.id);
-                const nextTrack = recommendations[currentIndex + 1];
-                if (nextTrack) {
-                  setCurrentTrack(nextTrack);
-                }
-              }}
+              onNext={handleNextTrack}
+              onPrevious={handlePreviousTrack}
               onFeedback={handleFeedback}
             />
           )}
