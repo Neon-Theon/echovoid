@@ -51,7 +51,7 @@ export default function Home() {
   const { data: processingStatus } = useQuery({
     queryKey: ["/api/processing-status", sessionId],
     enabled: !!sessionId,
-    refetchInterval: processingStatus?.status === "processing" ? 2000 : false,
+    refetchInterval: (q) => ((q.state.data as any)?.status === "processing" ? 2000 : false),
   }) as { data: ProcessingStatusType };
 
   // Generate recommendations mutation

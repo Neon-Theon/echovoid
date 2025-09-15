@@ -5,7 +5,7 @@ import { MusicBrainzService } from "./services/musicbrainz";
 import { GeminiService } from "./services/gemini";
 import { YouTubeService } from "./services/youtube";
 import { z } from "zod";
-import { insertSongListSchema, insertFeedbackSchema, type Song } from "@shared/schema";
+import { insertSongListSchema, insertFeedbackSchema, type Song, type AudioFeatures } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const musicBrainzService = new MusicBrainzService();
@@ -126,7 +126,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : [];
 
       const geminiRecs = await geminiService.generateRecommendations(
-        songList.features,
+        songList.features as AudioFeatures,
         userSongs,
         feedbackData
       );
@@ -228,7 +228,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const features = songLists[0].features;
+      const features = songLists[0].features as AudioFeatures;
       const archetype = await geminiService.generateSonicArchetype(features);
 
       // Extract key from chroma data (simplified)

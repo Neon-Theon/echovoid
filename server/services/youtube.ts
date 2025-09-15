@@ -3,19 +3,22 @@
 export class YouTubeService {
   async searchVideo(query: string): Promise<{ id: string; url: string } | null> {
     try {
-      // Dynamic import to handle the package
-      const { default: search } = await import('youtube-search-without-api-key');
+      // Import the search function
+      const { search } = await import('youtube-search-without-api-key');
       
-      const results = await search(query, {
-        type: 'video',
-        maxResults: 1
-      });
+      const results = await search(query);
+      console.log(`YouTube search results for "${query}":`, results);
 
       if (results && results.length > 0) {
-        return {
-          id: results[0].id.videoId,
-          url: results[0].url
-        };
+        const result = results[0];
+        // Handle the result structure from the library
+        const videoId = result.id.videoId;
+        if (videoId) {
+          return {
+            id: videoId,
+            url: `https://www.youtube.com/watch?v=${videoId}`
+          };
+        }
       }
 
       return null;
@@ -24,19 +27,21 @@ export class YouTubeService {
       
       // Fallback: try with modified query
       try {
-        const { default: search } = await import('youtube-search-without-api-key');
+        const { search } = await import('youtube-search-without-api-key');
         const fallbackQuery = `${query} lyrics`;
         
-        const results = await search(fallbackQuery, {
-          type: 'video',
-          maxResults: 1
-        });
+        const results = await search(fallbackQuery);
+        console.log(`YouTube fallback search results for "${fallbackQuery}":`, results);
 
         if (results && results.length > 0) {
-          return {
-            id: results[0].id.videoId,
-            url: results[0].url
-          };
+          const result = results[0];
+          const videoId = result.id.videoId;
+          if (videoId) {
+            return {
+              id: videoId,
+              url: `https://www.youtube.com/watch?v=${videoId}`
+            };
+          }
         }
       } catch (fallbackError) {
         console.error(`Fallback search also failed for "${query}":`, fallbackError);

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import WaveformVisualizer from "./WaveformVisualizer";
+import WaveformVisualizer from "@/components/WaveformVisualizer";
 import type { Recommendation } from "@/lib/types";
 
 interface YouTubePlayerProps {

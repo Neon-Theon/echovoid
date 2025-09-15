@@ -91,6 +91,7 @@ export class MemStorage implements IStorage {
     const recommendation: Recommendation = {
       id,
       ...data,
+      videoId: data.videoId ?? null,
       createdAt: new Date(),
     };
     this.recommendations.set(id, recommendation);
