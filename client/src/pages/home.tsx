@@ -16,6 +16,7 @@ export default function Home() {
   const [sessionId, setSessionId] = useState<string>("");
   const [currentSongListId, setCurrentSongListId] = useState<string>("");
   const [currentTrack, setCurrentTrack] = useState<Recommendation | null>(null);
+  const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(-1);
   const queryClient = useQueryClient();
 
   // Initialize session with localStorage persistence
@@ -51,6 +52,10 @@ export default function Home() {
         sessionId,
         songs
       });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
       return response.json();
     },
     onSuccess: (data) => {
@@ -59,19 +64,21 @@ export default function Home() {
       // Also invalidate sonic profile to refresh it after processing
       queryClient.invalidateQueries({ queryKey: ["/api/sonic-profile", sessionId] });
     },
-    onError: async (error) => {
+    onError: async (error, variables) => {
       console.error("Failed to process songs:", error);
-      console.error("Error details:", error.message, error.cause);
+      console.error("Error details:", error.message);
       
       // If session not found, create a new session and retry
       if (error.message && error.message.includes("Session not found")) {
-        console.log("Session expired, creating new session...");
+        console.log("Session expired, creating new session and retrying...");
         try {
           const response = await apiRequest("POST", "/api/session");
           const session = await response.json();
           setSessionId(session.id);
           localStorage.setItem("echo-void-session-id", session.id);
           console.log("Created new session after expiry:", session.id);
+          // Retry the mutation with the same variables
+          processMutation.mutate(variables);
         } catch (sessionError) {
           console.error("Failed to create new session:", sessionError);
         }
@@ -113,7 +120,11 @@ export default function Home() {
     }
   });
 
-  // Recommendations are now handled by RecommendationsPanel component
+  // Get current recommendations to manage playlist navigation
+  const { data: recommendations = [] } = useQuery({
+    queryKey: ["/api/recommendations", sessionId],
+    enabled: !!sessionId,
+  }) as { data: Recommendation[] };
 
   // Submit feedback mutation
   const feedbackMutation = useMutation({
@@ -130,11 +141,15 @@ export default function Home() {
     }
   });
 
+  // Note: Auto-start after auto-generation is now handled directly in handleNextTrack
+  // to avoid race conditions and ensure reliable triggering
+
   const handleSongSubmit = useCallback((songs: Song[]) => {
     if (!sessionId) {
       console.error("No session ID available!");
       return;
     }
+    console.log("Submitting songs for processing with session:", sessionId);
     processMutation.mutate(songs);
   }, [sessionId, processMutation]);
 
@@ -145,18 +160,75 @@ export default function Home() {
   }, [currentSongListId, recommendationsMutation]);
 
   const handlePlayTrack = useCallback((recommendation: Recommendation) => {
+    const index = recommendations.findIndex(r => r.id === recommendation.id);
     setCurrentTrack(recommendation);
-  }, []);
+    setCurrentTrackIndex(index);
+  }, [recommendations]);
 
   const handlePreviousTrack = useCallback(() => {
-    // Previous track functionality is now handled by the RecommendationsPanel
-    setCurrentTrack(null);
-  }, []);
+    if (recommendations.length === 0) return;
+    
+    const newIndex = currentTrackIndex - 1;
+    if (newIndex >= 0) {
+      const prevTrack = recommendations[newIndex];
+      setCurrentTrack(prevTrack);
+      setCurrentTrackIndex(newIndex);
+    } else {
+      // At the beginning - could loop to end or exit
+      setCurrentTrack(null);
+      setCurrentTrackIndex(-1);
+    }
+  }, [recommendations, currentTrackIndex]);
 
-  const handleNextTrack = useCallback(() => {
-    // Next track functionality is now handled by the RecommendationsPanel  
-    setCurrentTrack(null);
-  }, []);
+  const handleNextTrack = useCallback(async () => {
+    // Prevent concurrent requests
+    if (recommendationsMutation.isPending) return;
+    
+    if (recommendations.length === 0) {
+      setCurrentTrack(null);
+      setCurrentTrackIndex(-1);
+      return;
+    }
+    
+    const newIndex = currentTrackIndex + 1;
+    
+    // If we have more tracks in current recommendations, play next
+    if (newIndex < recommendations.length) {
+      const nextTrack = recommendations[newIndex];
+      setCurrentTrack(nextTrack);
+      setCurrentTrackIndex(newIndex);
+    } else {
+      // Reached end of recommendations - auto-generate new ones
+      console.log("End of recommendations reached, generating new ones...");
+      try {
+        if (currentSongListId) {
+          // Reset state before generating to ensure clean auto-start
+          setCurrentTrack(null);
+          setCurrentTrackIndex(-1);
+          
+          await recommendationsMutation.mutateAsync();
+          console.log("New recommendations generated successfully");
+          
+          // Get fresh recommendations and auto-start first track
+          const freshRecommendations = queryClient.getQueryData(["/api/recommendations", sessionId]) as Recommendation[];
+          if (freshRecommendations && freshRecommendations.length > 0) {
+            console.log("Auto-starting first new recommendation after playlist exhaustion");
+            setCurrentTrack(freshRecommendations[0]);
+            setCurrentTrackIndex(0);
+          }
+        } else {
+          // No more recommendations and can't generate - exit player
+          setCurrentTrack(null);
+          setCurrentTrackIndex(-1);
+        }
+      } catch (error) {
+        console.error("Failed to generate new recommendations:", error);
+        // Exit player on error
+        setCurrentTrack(null);
+        setCurrentTrackIndex(-1);
+      }
+    }
+  }, [recommendations, currentTrackIndex, currentSongListId, recommendationsMutation, queryClient, sessionId]);
 
   const handleFeedback = useCallback((recommendationId: string, liked: boolean) => {
     feedbackMutation.mutate({ recommendationId, liked });
@@ -187,7 +259,7 @@ export default function Home() {
           ) : (
             <SongInput 
               onSubmit={handleSongSubmit}
-              isProcessing={processMutation.isPending}
+              isProcessing={processMutation.isPending || !sessionId}
             />
           )}
 
